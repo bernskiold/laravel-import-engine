@@ -19,7 +19,9 @@ use Throwable;
  * It makes three decisions:
  *
  * - The headings are on the first row that has more than one filled cell.
- *   A title row has one filled cell, so the engine does not use it.
+ *   A title row has one filled cell, so the engine does not use it. If no
+ *   row has more than one filled cell, the file has one column, and the
+ *   first filled row is the heading.
  * - Each cell is a trimmed string. Excel keeps a number such as 1234 as the
  *   float 1234.0, and a date as a DateTime. Both become the text that the
  *   person typed.
@@ -172,12 +174,22 @@ final class Spreadsheet
     {
         $reader = $this->reader()->noHeaderRow();
 
+        /*
+         * The first row with one filled cell, in case the file has only one
+         * column. Then each row has one cell, and that row is the heading.
+         */
+        $firstFilled = null;
+
         try {
             foreach ($reader->getRows() as $index => $values) {
                 $cells = array_map(fn (mixed $value): string => self::stringify($value), array_values($values));
                 $filled = array_filter($cells, fn (string $cell): bool => $cell !== '');
 
                 if (count($filled) < self::HEADER_MINIMUM_CELLS) {
+                    if ($filled !== [] && $firstFilled === null) {
+                        $firstFilled = [$index, $cells];
+                    }
+
                     continue;
                 }
 
@@ -185,6 +197,14 @@ final class Spreadsheet
                 $this->headers = $this->nameHeaders($cells);
 
                 break;
+            }
+
+            if ($this->headers === [] && $firstFilled !== null) {
+                [$this->headerIndex, $cells] = $firstFilled;
+
+                $lastFilled = (int) array_key_last(array_filter($cells, fn (string $cell): bool => $cell !== ''));
+
+                $this->headers = $this->nameHeaders(array_slice($cells, 0, $lastFilled + 1));
             }
         } catch (UnreadableFileException $exception) {
             throw $exception;

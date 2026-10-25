@@ -110,8 +110,25 @@ it('does not open an ods file', function () {
     Spreadsheet::open(spreadsheet("Client,BFC\nSony,1234\n", 'ods'));
 })->throws(UnreadableFileException::class);
 
-it('does not open a file that has no headings', function () {
-    Spreadsheet::open(spreadsheet("Just a note\n\nAnd another\n"));
+it('reads a file with one column', function () {
+    $sheet = Spreadsheet::open(spreadsheet("Email\nada@example.com\n\ngrace@example.com\n"));
+
+    expect($sheet->headers())->toBe(['Email'])
+        ->and($sheet->preview())->toBe([
+            ['line' => 2, 'values' => ['Email' => 'ada@example.com']],
+            ['line' => 4, 'values' => ['Email' => 'grace@example.com']],
+        ]);
+});
+
+it('reads an excel file with one column', function () {
+    $sheet = Spreadsheet::open(workbook([['Email'], ['ada@example.com']]));
+
+    expect($sheet->headers())->toBe(['Email'])
+        ->and($sheet->count())->toBe(1);
+});
+
+it('does not open a file that has no filled cells', function () {
+    Spreadsheet::open(spreadsheet("\n,\n\n"));
 })->throws(UnreadableFileException::class);
 
 it('does not open a file that is not a spreadsheet', function () {
