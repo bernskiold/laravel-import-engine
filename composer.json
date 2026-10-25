@@ -1,0 +1,80 @@
+{
+    "name": "bernskiold/laravel-import-engine",
+    "description": "Import CSV and Excel files into Laravel. Map the columns, preview the result, run it on the queue and keep a report of each row.",
+    "keywords": [
+        "bernskiold",
+        "laravel",
+        "import",
+        "csv",
+        "excel",
+        "xlsx",
+        "spreadsheet"
+    ],
+    "homepage": "https://github.com/bernskiold/laravel-import-engine",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Bernskiold",
+            "email": "hello@bernskiold.com",
+            "role": "Developer"
+        },
+        {
+            "name": "Erik Bernskiöld",
+            "email": "erik@bernskiold.com",
+            "homepage": "https://bernskiold.com",
+            "role": "Developer"
+        }
+    ],
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "require": {
+        "php": "^8.3",
+        "illuminate/contracts": "^11.0 || ^12.0 || ^13.0",
+        "illuminate/database": "^11.0 || ^12.0 || ^13.0",
+        "illuminate/filesystem": "^11.0 || ^12.0 || ^13.0",
+        "illuminate/http": "^11.0 || ^12.0 || ^13.0",
+        "illuminate/queue": "^11.0 || ^12.0 || ^13.0",
+        "illuminate/support": "^11.0 || ^12.0 || ^13.0",
+        "openspout/openspout": "^4.30 || ^5.0",
+        "spatie/simple-excel": "^3.11"
+    },
+    "require-dev": {
+        "laravel/pint": "^1.0",
+        "nunomaduro/collision": "^8.0 || ^9.0",
+        "orchestra/testbench": "^9.0 || ^10.0 || ^11.0",
+        "pestphp/pest": "^3.0 || ^4.0 || ^5.0",
+        "pestphp/pest-plugin-laravel": "^3.0 || ^4.0 || ^5.0",
+        "phpstan/phpstan": "^2.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Bernskiold\\LaravelImportEngine\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Bernskiold\\LaravelImportEngine\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "phpstan/extension-installer": true
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Bernskiold\\LaravelImportEngine\\ImportEngineServiceProvider"
+            ]
+        }
+    },
+    "scripts": {
+        "post-autoload-dump": "@php ./vendor/bin/testbench package:discover --ansi",
+        "test": "vendor/bin/pest",
+        "test-coverage": "vendor/bin/pest --coverage",
+        "format": "vendor/bin/pint",
+        "phpstan": "vendor/bin/phpstan analyse --configuration=phpstan.neon.dist --memory-limit=2G"
+    }
+}

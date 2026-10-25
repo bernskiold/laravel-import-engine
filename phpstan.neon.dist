@@ -1,0 +1,19 @@
+parameters:
+    level: 5
+    paths:
+        - src
+        - config
+    tmpDir: build/phpstan
+    treatPhpDocTypesAsCertain: false
+    reportUnmatchedIgnoredErrors: false
+    ignoreErrors:
+        # The shim supports openspout 4 and 5. PHPStan sees only the installed
+        # version, so the branch for the other version looks impossible.
+        -
+            path: src/Support/OpenSpout.php
+            identifiers:
+                - function.impossibleType
+                - function.alreadyNarrowedType
+                - method.notFound
+                - argument.unknown
+                - new.noConstructor
