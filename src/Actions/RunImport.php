@@ -34,14 +34,16 @@ class RunImport
         ImportStarted::dispatch($import);
 
         try {
-            $report = $import->withSpreadsheet(
-                fn (Spreadsheet $spreadsheet): ImportReport => $import->importer()->import(new ImportContext(
+            $report = $import->withSpreadsheet(function (Spreadsheet $spreadsheet) use ($import): ImportReport {
+                $import->recordTotal($spreadsheet->count());
+
+                return $import->importer()->import(new ImportContext(
                     spreadsheet: $spreadsheet,
                     map: $import->column_map ?? [],
                     options: $import->options ?? [],
                     import: $import,
-                )),
-            );
+                ));
+            });
         } catch (Throwable $exception) {
             /*
              * The file is missing, it is not a spreadsheet, it does not have

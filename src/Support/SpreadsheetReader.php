@@ -15,9 +15,8 @@ use Spatie\SimpleExcel\SimpleExcelReader;
  * number in the file, so that a person can find the row in the spreadsheet.
  * If the reader removes a blank line, each row number after it is incorrect.
  *
- * In openspout 5 the options objects are readonly, thus this class makes new
- * ones with the flag set. The reader reads them when it opens the file,
- * after this call.
+ * The withOption() helper of simple-excel sets the flag on openspout 4 and
+ * 5. The reader reads the options when it opens the file, after this call.
  *
  * The engine does not accept ODS files. simple-excel has no options object
  * for ODS, so this flag can not be set for that format.
@@ -26,8 +25,8 @@ class SpreadsheetReader extends SimpleExcelReader
 {
     public function preserveEveryRow(): static
     {
-        $this->csvOptions = OpenSpout::preserveEmptyRows($this->csvOptions);
-        $this->xlsxOptions = OpenSpout::preserveEmptyRows($this->xlsxOptions);
+        $this->csvOptions = $this->withOption($this->csvOptions, 'SHOULD_PRESERVE_EMPTY_ROWS', true);
+        $this->xlsxOptions = $this->withOption($this->xlsxOptions, 'SHOULD_PRESERVE_EMPTY_ROWS', true);
 
         return $this;
     }

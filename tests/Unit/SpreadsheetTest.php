@@ -2,6 +2,11 @@
 
 use Bernskiold\LaravelImportEngine\Exceptions\UnreadableFileException;
 use Bernskiold\LaravelImportEngine\Support\Spreadsheet;
+use OpenSpout\Common\Entity\Cell;
+use OpenSpout\Common\Entity\Cell\DateTimeCell;
+use OpenSpout\Common\Entity\Row;
+use OpenSpout\Common\Entity\Style\Style;
+use Spatie\SimpleExcel\SimpleExcelWriter;
 
 it('reads the headings and the rows under them', function () {
     $sheet = Spreadsheet::open(spreadsheet("Client,BFC\nSony,1234\nPepsi,5678\n"));
@@ -134,3 +139,56 @@ it('does not open a file that has no filled cells', function () {
 it('does not open a file that is not a spreadsheet', function () {
     Spreadsheet::open(spreadsheet('this is not a zip archive', 'xlsx'));
 })->throws(UnreadableFileException::class);
+
+it('reads a csv file in Windows-1252', function () {
+    $sheet = Spreadsheet::open(spreadsheet(mb_convert_encoding("Client,City\nNestlé,Zürich\n", 'Windows-1252', 'UTF-8')));
+
+    expect($sheet->encoding())->toBe('Windows-1252')
+        ->and($sheet->preview()[0]['values'])->toBe(['Client' => 'Nestlé', 'City' => 'Zürich']);
+});
+
+it('reads the unicode text export of Excel', function () {
+    $sheet = Spreadsheet::open(spreadsheet("\xFF\xFE".mb_convert_encoding("Client\tCity\nNestlé\tZürich\n", 'UTF-16LE', 'UTF-8'), 'txt'));
+
+    expect($sheet->encoding())->toBe('UTF-16LE')
+        ->and($sheet->headers())->toBe(['Client', 'City'])
+        ->and($sheet->preview()[0]['values'])->toBe(['Client' => 'Nestlé', 'City' => 'Zürich']);
+});
+
+it('reads a csv file in UTF-8 as UTF-8', function () {
+    $sheet = Spreadsheet::open(spreadsheet("Client,City\nNestlé,Zürich\n"));
+
+    expect($sheet->encoding())->toBe('UTF-8')
+        ->and($sheet->preview()[0]['values'])->toBe(['Client' => 'Nestlé', 'City' => 'Zürich']);
+});
+
+it('uses the configured encoding for a file that is not UTF-8', function () {
+    config()->set('import-engine.csv_fallback_encoding', 'ISO-8859-2');
+
+    $sheet = Spreadsheet::open(spreadsheet(mb_convert_encoding("Client,City\nŁódź,Kraków\n", 'ISO-8859-2', 'UTF-8')));
+
+    expect($sheet->encoding())->toBe('ISO-8859-2')
+        ->and($sheet->preview()[0]['values'])->toBe(['Client' => 'Łódź', 'City' => 'Kraków']);
+});
+
+it('keeps the time of an excel date cell that has one', function () {
+    $style = method_exists(Style::class, 'setFormat')
+        ? (new Style)->setFormat('yyyy-mm-dd hh:mm')
+        : new Style(format: 'yyyy-mm-dd hh:mm');
+
+    $path = tempnam(sys_get_temp_dir(), 'import-engine').'.xlsx';
+
+    $writer = SimpleExcelWriter::create($path)->noHeaderRow();
+    $writer->addRow(['Name', 'Sent']);
+
+    foreach (['Ada' => '2026-10-25 00:00:00', 'Grace' => '2026-10-25 14:30:00'] as $name => $sent) {
+        $writer->addRow(new Row([
+            Cell::fromValue($name),
+            new DateTimeCell(new DateTimeImmutable($sent), $style),
+        ]));
+    }
+
+    $writer->close();
+
+    expect(array_column(array_column(Spreadsheet::open($path)->preview(), 'values'), 'Sent'))->toBe(['2026-10-25', '2026-10-25 14:30:00']);
+});

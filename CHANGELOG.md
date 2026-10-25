@@ -14,3 +14,10 @@ All the important changes to `laravel-import-engine` are in this file.
 - `ImportStarted`, `ImportCompleted` and `ImportFailed` events.
 - `Workbook` to download a template or an export as an Excel file.
 - Support for openspout 4 and 5.
+- Validation rules for each row, with `rules()`, `messages()` and `validationAttributes()`.
+- The progress of a run on the record: `total_rows`, `processed_rows` and `progress()`.
+- The text encoding of a CSV file: UTF-8, UTF-16 with a byte order mark, or the `csv_fallback_encoding` config.
+- `ImportRow::date()` and `ImportRow::toArray()`. Excel date cells keep their time.
+- Files with one column.
+- `Testing\Spreadsheets` and `StartImport::fake()` for tests.
+- Pruning of settled imports with the `prune_after_days` config.

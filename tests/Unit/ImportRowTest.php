@@ -82,3 +82,47 @@ it('gives all the mapped values without the placeholders', function () {
     expect($row->all())->toBe(['name' => 'Sony'])
         ->and($row->original())->toBe(['Client' => 'Sony', 'Code' => 'n/a']);
 });
+
+it('reads a date', function (string $cell, ?string $expected) {
+    expect((new ImportRow(line: 2, values: ['date' => $cell]))->date('date')?->format('Y-m-d H:i:s'))->toBe($expected);
+})->with([
+    'iso' => ['2026-10-25', '2026-10-25 00:00:00'],
+    'iso with time' => ['2026-10-25 14:30', '2026-10-25 14:30:00'],
+    'iso with seconds' => ['2026-10-25T14:30:15', '2026-10-25 14:30:15'],
+    'slashes' => ['25/10/2026', '2026-10-25 00:00:00'],
+    'dots' => ['3.4.2026', '2026-04-03 00:00:00'],
+    'dashes' => ['03-04-2026', '2026-04-03 00:00:00'],
+    'month name' => ['25 Oct 2026', '2026-10-25 00:00:00'],
+    'long month name' => ['October 25, 2026', '2026-10-25 00:00:00'],
+    'not a day' => ['31/02/2026', null],
+    'not an iso day' => ['2026-02-31', null],
+    'a number' => ['45000', null],
+    'text' => ['soon', null],
+    'placeholder' => ['TBC', null],
+]);
+
+it('reads the month first when configured', function () {
+    config()->set('import-engine.date_order', 'mdy');
+
+    expect((new ImportRow(line: 2, values: ['date' => '03/04/2026']))->date('date')->format('Y-m-d'))->toBe('2026-03-04');
+});
+
+it('reads a date with a format', function () {
+    $row = new ImportRow(line: 2, values: ['date' => '20261025', 'other' => '2026-10-25']);
+
+    expect($row->date('date', 'Ymd')->format('Y-m-d H:i:s'))->toBe('2026-10-25 00:00:00')
+        ->and($row->date('other', 'Ymd'))->toBeNull();
+});
+
+it('reads a date in a timezone', function () {
+    $date = (new ImportRow(line: 2, values: ['date' => '2026-10-25 14:30']))->date('date', timezone: 'Europe/Stockholm');
+
+    expect($date->getTimezone()->getName())->toBe('Europe/Stockholm')
+        ->and($date->format('H:i'))->toBe('14:30');
+});
+
+it('gives each mapped field for the validator', function () {
+    $row = new ImportRow(line: 2, values: ['name' => 'Sony', 'code' => 'n/a']);
+
+    expect($row->toArray())->toBe(['name' => 'Sony', 'code' => null]);
+});

@@ -27,6 +27,10 @@ use Throwable;
  *   person typed.
  * - This class, not the reader, removes the empty rows. The reader must keep
  *   them, so that each row number is the line number in the file.
+ * - The text encoding of a CSV file. Excel on Windows often saves CSV files
+ *   in Windows-1252, and its "Unicode text" export is UTF-16. A file that
+ *   has a byte order mark, or that is valid UTF-8, is read as such. Another
+ *   file is read with the "csv_fallback_encoding" config.
  *
  * The extension selects the reader. The engine reads .csv, .txt (as CSV) and
  * .xlsx files. It does not read .ods files, see SpreadsheetReader.
@@ -51,6 +55,8 @@ final class Spreadsheet
      * The reader keeps every row, so this is the line number less one.
      */
     private int $headerIndex = 0;
+
+    private ?string $encoding = null;
 
     private function __construct(
         private readonly string $path,
@@ -77,6 +83,14 @@ final class Spreadsheet
     public function path(): string
     {
         return $this->path;
+    }
+
+    /**
+     * The text encoding of the file. An XLSX file is always UTF-8.
+     */
+    public function encoding(): string
+    {
+        return $this->encoding ??= $this->detectEncoding();
     }
 
     /**
@@ -293,8 +307,47 @@ final class Spreadsheet
          * and the chain then loses the type of this subclass.
          */
         $reader->useDelimiter($this->delimiter());
+        $reader->useEncoding($this->encoding());
 
         return $reader;
+    }
+
+    private function detectEncoding(): string
+    {
+        if (Str::lower(pathinfo($this->path, PATHINFO_EXTENSION)) === 'xlsx') {
+            return 'UTF-8';
+        }
+
+        $handle = @fopen($this->path, 'r');
+
+        if ($handle === false) {
+            return 'UTF-8';
+        }
+
+        $sample = (string) fread($handle, 65536);
+        fclose($handle);
+
+        $encoding = match (true) {
+            str_starts_with($sample, "\xEF\xBB\xBF") => 'UTF-8',
+            str_starts_with($sample, "\xFF\xFE") => 'UTF-16LE',
+            str_starts_with($sample, "\xFE\xFF") => 'UTF-16BE',
+            default => null,
+        };
+
+        if ($encoding !== null) {
+            return $encoding;
+        }
+
+        /*
+         * The sample can stop in the middle of a character. Examine it up to
+         * its last line break.
+         */
+        $lastLine = strrpos($sample, "\n");
+        $complete = $lastLine === false ? $sample : substr($sample, 0, $lastLine);
+
+        return mb_check_encoding($complete, 'UTF-8')
+            ? 'UTF-8'
+            : (string) config('import-engine.csv_fallback_encoding', 'Windows-1252');
     }
 
     /**
@@ -347,7 +400,7 @@ final class Spreadsheet
         }
 
         if ($value instanceof DateTimeInterface) {
-            $value = $value->format('Y-m-d');
+            $value = $value->format($value->format('H:i:s') === '00:00:00' ? 'Y-m-d' : 'Y-m-d H:i:s');
         }
 
         if (! is_scalar($value)) {

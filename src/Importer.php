@@ -11,6 +11,7 @@ use Bernskiold\LaravelImportEngine\Support\ImportReport;
 use Bernskiold\LaravelImportEngine\Support\ImportRow;
 use Generator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use LogicException;
 use ReflectionMethod;
@@ -46,6 +47,18 @@ abstract class Importer
     private array $fieldsByColumn = [];
 
     /**
+     * The number of rows that the run has read.
+     */
+    private int $processed = 0;
+
+    /**
+     * The validation rules of the run, read one time for each run.
+     *
+     * @var array<string, mixed>|null
+     */
+    private ?array $runRules = null;
+
+    /**
      * The columns that the importer can read, in the order to show them.
      *
      * @return array<int, Column>
@@ -73,6 +86,51 @@ abstract class Importer
     public function connections(): array
     {
         return [null];
+    }
+
+    /**
+     * The validation rules for each row, keyed by field.
+     *
+     * The engine validates each row before it gives the row to importRow().
+     * A row that is not valid is a failed entry with the messages of the
+     * validator. The values are the strings of ImportRow::toArray(), with
+     * null for an empty cell or a placeholder.
+     *
+     *     return [
+     *         'email' => ['required', 'email'],
+     *         'rank' => ['nullable', 'integer', 'min:1'],
+     *     ];
+     *
+     * The engine reads the rules one time for each run, so the rules can use
+     * option().
+     *
+     * @return array<string, mixed>
+     */
+    public function rules(): array
+    {
+        return [];
+    }
+
+    /**
+     * Custom messages for the validation rules.
+     *
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [];
+    }
+
+    /**
+     * The names of the fields in the validation messages.
+     *
+     * The default is the label of each column.
+     *
+     * @return array<string, string>
+     */
+    public function validationAttributes(): array
+    {
+        return $this->fields();
     }
 
     /**
@@ -105,14 +163,19 @@ abstract class Importer
 
         $this->context = $context;
         $this->fieldsByColumn = $this->fieldsByColumn($map);
+        $this->processed = 0;
+        $this->runRules = null;
 
         $report = new ImportReport;
 
         try {
             $this->handle($report);
         } finally {
+            $this->saveProgress();
+
             $this->context = null;
             $this->fieldsByColumn = [];
+            $this->runRules = null;
         }
 
         return $report;
@@ -255,6 +318,16 @@ abstract class Importer
              */
             $rowReport = new ImportReport;
 
+            $this->advance();
+
+            $errors = $this->validationErrors($row);
+
+            if ($errors !== []) {
+                $report->failed($row, $this->subject($row), $errors);
+
+                continue;
+            }
+
             try {
                 $this->transactionPerRow()
                     ? $this->inTransactions(fn () => $this->importRow($row, $rowReport), $this->connections())
@@ -281,6 +354,43 @@ abstract class Importer
     protected function importRow(ImportRow $row, ImportReport $report): void
     {
         throw ImportEngineException::nothingToImport(static::class);
+    }
+
+    /**
+     * Count rows as read, for the progress of the run.
+     *
+     * The default handle() calls this for each row. An override of handle()
+     * calls it when it reads rows. The engine writes the progress to the
+     * record at an interval, see the "progress_interval" config, and at the
+     * end of the run. A preview does not write progress.
+     */
+    final protected function advance(int $rows = 1): void
+    {
+        $this->processed += $rows;
+
+        $interval = max(1, (int) config('import-engine.progress_interval', 50));
+
+        if (intdiv($this->processed, $interval) !== intdiv($this->processed - $rows, $interval)) {
+            $this->saveProgress();
+        }
+    }
+
+    /**
+     * The messages of the rules that the row does not obey.
+     *
+     * @return array<int, string>
+     */
+    final protected function validationErrors(ImportRow $row): array
+    {
+        $this->runRules ??= $this->rules();
+
+        if ($this->runRules === []) {
+            return [];
+        }
+
+        return Validator::make($row->toArray(), $this->runRules, $this->messages(), $this->validationAttributes())
+            ->errors()
+            ->all();
     }
 
     /**
@@ -360,6 +470,17 @@ abstract class Importer
         }
 
         return null;
+    }
+
+    private function saveProgress(): void
+    {
+        $context = $this->context;
+
+        if ($context === null || $context->preview || $context->import === null) {
+            return;
+        }
+
+        $context->import->recordProgress($this->processed);
     }
 
     /**

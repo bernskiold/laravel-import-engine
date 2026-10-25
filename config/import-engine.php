@@ -46,6 +46,33 @@ return [
     'delete_files_after_run' => false,
 
     /*
+     * The text encoding of a CSV file that has no byte order mark and is not
+     * valid UTF-8. Excel on Windows saves CSV files in Windows-1252.
+     */
+    'csv_fallback_encoding' => 'Windows-1252',
+
+    /*
+     * The order of a date such as "03/04/2026": "dmy" reads the 3rd of April,
+     * "mdy" reads the 4th of March. See ImportRow::date().
+     */
+    'date_order' => 'dmy',
+
+    /*
+     * Write the progress of a run to the record after this number of rows.
+     * A screen can poll the record and show the progress.
+     */
+    'progress_interval' => 50,
+
+    /*
+     * Delete the settled imports, and their files, after this number of days.
+     * Leave null to keep them. Schedule the model:prune command with the
+     * import model, for example:
+     *
+     *     Schedule::command('model:prune', ['--model' => [Import::class]])->daily();
+     */
+    'prune_after_days' => null,
+
+    /*
      * Send the exception of a row that failed to the exception handler.
      * The report always records the row as failed.
      */

@@ -8,6 +8,7 @@ use Bernskiold\LaravelImportEngine\Enums\ImportStatus;
 use Bernskiold\LaravelImportEngine\ImportEngine;
 use Bernskiold\LaravelImportEngine\Jobs\RunImportJob;
 use Bernskiold\LaravelImportEngine\Models\Import;
+use Bernskiold\LaravelImportEngine\Testing\StartImportFake;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\File;
 use Illuminate\Http\UploadedFile;
@@ -69,8 +70,29 @@ class StartImport
             'user_id' => $user?->getAuthIdentifier() ?? Auth::id(),
         ])->save();
 
-        RunImportJob::dispatch($import)->afterCommit();
+        $this->dispatch($import);
 
         return $import;
+    }
+
+    /**
+     * Replace this action in the container with a fake that does not send
+     * the job. The fake keeps the file and makes the record.
+     */
+    public static function fake(): StartImportFake
+    {
+        $fake = new StartImportFake;
+
+        app()->instance(static::class, $fake);
+
+        return $fake;
+    }
+
+    /**
+     * Send the run to the queue, after the database transaction commits.
+     */
+    protected function dispatch(Import $import): void
+    {
+        RunImportJob::dispatch($import)->afterCommit();
     }
 }

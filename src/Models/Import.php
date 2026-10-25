@@ -16,6 +16,7 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Prunable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -47,6 +48,8 @@ use Throwable;
  * @property array<string, mixed>|null $report
  * @property array<string, int>|null $summary
  * @property string|null $failure_reason
+ * @property int|null $total_rows
+ * @property int $processed_rows
  * @property int|string|null $user_id
  * @property Carbon|null $started_at
  * @property Carbon|null $completed_at
@@ -58,6 +61,7 @@ use Throwable;
 class Import extends Model
 {
     use HasUuids;
+    use Prunable;
 
     protected $fillable = [
         'type',
@@ -70,6 +74,8 @@ class Import extends Model
         'report',
         'summary',
         'failure_reason',
+        'total_rows',
+        'processed_rows',
         'user_id',
         'started_at',
         'completed_at',
@@ -78,6 +84,7 @@ class Import extends Model
 
     protected $attributes = [
         'status' => 'pending',
+        'processed_rows' => 0,
     ];
 
     public function getTable(): string
@@ -112,6 +119,8 @@ class Import extends Model
             'options' => 'array',
             'report' => 'array',
             'summary' => 'array',
+            'total_rows' => 'integer',
+            'processed_rows' => 'integer',
             'started_at' => 'datetime',
             'completed_at' => 'datetime',
             'failed_at' => 'datetime',
@@ -179,7 +188,48 @@ class Import extends Model
         $this->update([
             'status' => ImportStatus::Processing,
             'started_at' => now(),
+            'total_rows' => null,
+            'processed_rows' => 0,
         ]);
+    }
+
+    /**
+     * Keep the number of rows that the run must read.
+     *
+     * This does not cause model events. Thus an activity log does not get
+     * an entry for each update of the progress.
+     */
+    public function recordTotal(int $rows): void
+    {
+        $this->forceFill(['total_rows' => $rows])->saveQuietly();
+    }
+
+    /**
+     * Keep the number of rows that the run has read.
+     *
+     * This does not cause model events, see recordTotal().
+     */
+    public function recordProgress(int $rows): void
+    {
+        $this->forceFill(['processed_rows' => $rows])->saveQuietly();
+    }
+
+    /**
+     * The part of the file that the run has read, from 0 to 1.
+     *
+     * Null when the total is not known yet.
+     */
+    public function progress(): ?float
+    {
+        if ($this->isCompleted()) {
+            return 1.0;
+        }
+
+        if (! $this->total_rows) {
+            return null;
+        }
+
+        return min(1.0, $this->processed_rows / $this->total_rows);
     }
 
     public function complete(ImportReport $report): void
@@ -439,6 +489,32 @@ class Import extends Model
     public function scopeLatestFirst(Builder $query): Builder
     {
         $query->orderByDesc('created_at')->orderByDesc('id');
+
+        return $query;
+    }
+
+    /**
+     * The settled imports that are older than the "prune_after_days" config.
+     *
+     * The model:prune command deletes each one as a model, so its file goes
+     * too. When the config is null, nothing is pruned.
+     *
+     * @return Builder<static>
+     */
+    public function prunable(): Builder
+    {
+        $days = config('import-engine.prune_after_days');
+
+        $query = static::query();
+
+        if ($days === null) {
+            $query->whereRaw('1 = 0');
+
+            return $query;
+        }
+
+        $query->whereIn('status', [ImportStatus::Completed, ImportStatus::Failed])
+            ->where('created_at', '<', now()->subDays((int) $days));
 
         return $query;
     }

@@ -2,7 +2,9 @@
 
 namespace Bernskiold\LaravelImportEngine\Support;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * One row of the file, after the column map, with the values keyed by field.
@@ -14,6 +16,7 @@ use Illuminate\Support\Str;
  * - lines() splits a cell on line breaks only, for names that contain commas.
  * - integer() reads "#7" and "7.0" as 7.
  * - boolean() reads "yes", "y", "true", "1" and "x" as true.
+ * - date() reads "2026-10-25", "25/10/2026" and "25 Oct 2026" as a date.
  *
  * The line is the line number in the file, from one. It agrees with the row
  * number that the person sees in the spreadsheet.
@@ -149,6 +152,78 @@ final readonly class ImportRow
     }
 
     /**
+     * The value of the field as a date, or null.
+     *
+     * With a format, the value must have that format. Without a format, the
+     * engine reads these values:
+     *
+     * - "2026-10-25", "2026-10-25 14:30" and "2026-10-25T14:30:00".
+     * - "25/10/2026", "25.10.2026" and "25-10-2026", with the day first.
+     *   Set the "date_order" config to "mdy" to read the month first.
+     * - A value with the name of the month, for example "25 Oct 2026".
+     *
+     * A value that is not a valid date is null. The engine does not guess.
+     * An XLSX date cell is read as "2026-10-25", or with the time when the
+     * time is not midnight.
+     */
+    public function date(string $field, ?string $format = null, ?string $timezone = null): ?CarbonImmutable
+    {
+        $value = $this->get($field);
+
+        if ($value === null) {
+            return null;
+        }
+
+        if ($format !== null) {
+            return self::fromFormat($format, $value, $timezone);
+        }
+
+        if (preg_match('/^\d{4}-\d{1,2}-\d{1,2}([ T]\d{1,2}:\d{2}(:\d{2})?)?$/', $value, $matches)) {
+            $format = match (true) {
+                ! isset($matches[1]) => '!Y-m-d',
+                isset($matches[2]) => '!Y-m-d?H:i:s',
+                default => '!Y-m-d?H:i',
+            };
+
+            return self::fromFormat($format, $value, $timezone);
+        }
+
+        if (preg_match('/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/', $value, $matches)) {
+            [$first, $second] = [(int) $matches[1], (int) $matches[2]];
+            [$day, $month] = config('import-engine.date_order', 'dmy') === 'mdy' ? [$second, $first] : [$first, $second];
+
+            return checkdate($month, $day, (int) $matches[3])
+                ? CarbonImmutable::create((int) $matches[3], $month, $day, 0, 0, 0, $timezone)
+                : null;
+        }
+
+        if (preg_match('/[a-z]{3,}/i', $value) !== 1) {
+            return null;
+        }
+
+        try {
+            return CarbonImmutable::parse($value, $timezone);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Each mapped field of the row, with null for an empty cell or a
+     * placeholder.
+     *
+     * The engine gives this to the validator.
+     *
+     * @return array<string, string|null>
+     */
+    public function toArray(): array
+    {
+        return collect(array_keys($this->values))
+            ->mapWithKeys(fn (string $field): array => [$field => $this->get($field)])
+            ->all();
+    }
+
+    /**
      * The mapped values that the row has, keyed by field.
      *
      * Placeholders are not included.
@@ -190,6 +265,35 @@ final readonly class ImportRow
             ->unique()
             ->values()
             ->all();
+    }
+
+    private static function fromFormat(string $format, string $value, ?string $timezone): ?CarbonImmutable
+    {
+        /*
+         * Without "!" or "|", PHP takes the fields that the format does not
+         * name from the current time.
+         */
+        if (! str_contains($format, '!') && ! str_contains($format, '|')) {
+            $format = '!'.$format;
+        }
+
+        try {
+            $date = CarbonImmutable::createFromFormat($format, $value, $timezone);
+        } catch (Throwable) {
+            return null;
+        }
+
+        if (! $date instanceof CarbonImmutable) {
+            return null;
+        }
+
+        $errors = CarbonImmutable::getLastErrors();
+
+        if ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0)) {
+            return null;
+        }
+
+        return $date;
     }
 
     private static function isPlaceholder(string $value): bool
