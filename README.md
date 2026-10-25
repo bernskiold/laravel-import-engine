@@ -323,9 +323,25 @@ Read a record:
 $import->status;               // ImportStatus::Pending, Processing, Completed or Failed.
 $import->isSettled();          // True when completed or failed. Stop to poll when this is true.
 $import->importReport();       // An ImportReport. It is empty when there is no report.
+$import->countOf(ImportOutcome::Created);
+$import->countOf('needing_attention');
 $import->failure_reason;
 $import->user;
 ```
+
+### A list of imports
+
+A report can contain thousands of entries. The record also keeps a summary of the counts in a column of its own. For a list of imports, use the `withoutReport()` scope and read the counts with `countOf()`:
+
+```php
+$imports = Import::query()->withoutReport()->latestFirst()->paginate();
+
+$import->countOf(ImportOutcome::Failed);
+```
+
+`countOf()` accepts an outcome, or one of the keys `rows`, `needing_attention` and `with_warnings`.
+
+Other scopes: `ofType($type)`, `startedBy($user)` and `latestFirst()`.
 
 ## Make a preview
 

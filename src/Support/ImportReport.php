@@ -183,6 +183,26 @@ final class ImportReport
     }
 
     /**
+     * The counts of the report, for a list of imports.
+     *
+     * The record stores the summary in a column of its own. Thus a list can
+     * show the counts without the full report.
+     *
+     * @return array{rows: int, created: int, updated: int, unchanged: int, conflicted: int, skipped: int, failed: int, needing_attention: int, with_warnings: int}
+     */
+    public function summary(): array
+    {
+        return [
+            'rows' => $this->rows(),
+            ...collect(ImportOutcome::cases())
+                ->mapWithKeys(fn (ImportOutcome $outcome): array => [$outcome->value => $this->countOf($outcome)])
+                ->all(),
+            'needing_attention' => $this->needingAttention(),
+            'with_warnings' => $this->countWithWarnings(),
+        ];
+    }
+
+    /**
      * @return array{entries: array<int, array<string, mixed>>, tallies: array<string, int>}
      */
     public function toArray(): array

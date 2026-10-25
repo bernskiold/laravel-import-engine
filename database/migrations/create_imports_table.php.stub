@@ -22,6 +22,7 @@ return new class extends Migration
             $table->json('column_map')->nullable();
             $table->json('options')->nullable();
             $table->json('report')->nullable();
+            $table->json('summary')->nullable();
             $table->text('failure_reason')->nullable();
             $table->foreignId('user_id')->nullable()->constrained((new $userModel)->getTable())->nullOnDelete();
             $table->timestamp('started_at')->nullable();

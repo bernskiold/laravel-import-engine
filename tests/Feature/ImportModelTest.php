@@ -1,5 +1,6 @@
 <?php
 
+use Bernskiold\LaravelImportEngine\Enums\ImportOutcome;
 use Bernskiold\LaravelImportEngine\Enums\ImportStatus;
 use Bernskiold\LaravelImportEngine\Exceptions\UnreadableFileException;
 use Bernskiold\LaravelImportEngine\Models\Import;
@@ -146,4 +147,42 @@ it('uses the configured table', function () {
     config()->set('import-engine.table', 'other_imports');
 
     expect((new Import)->getTable())->toBe('other_imports');
+});
+
+it('keeps a summary of the report, and reads it without the report', function () {
+    Storage::fake('local');
+
+    $import = storedImport();
+    $import->complete((new ImportReport)
+        ->created(2, 'Sony', warnings: ['Check the title.'])
+        ->updated(3, 'Pepsi')
+        ->failed(4, 'Mars'));
+
+    $listed = Import::query()->withoutReport()->find($import->id);
+
+    expect($import->summary)->toBe([
+        'rows' => 3,
+        'created' => 1,
+        'updated' => 1,
+        'unchanged' => 0,
+        'conflicted' => 0,
+        'skipped' => 0,
+        'failed' => 1,
+        'needing_attention' => 1,
+        'with_warnings' => 1,
+    ])
+        ->and($listed->report)->toBeNull()
+        ->and($listed->countOf(ImportOutcome::Created))->toBe(1)
+        ->and($listed->countOf('needing_attention'))->toBe(1)
+        ->and(Import::query()->count())->toBe(1);
+});
+
+it('counts from the report when there is no summary', function () {
+    Storage::fake('local');
+
+    $import = storedImport(['report' => (new ImportReport)->created(2, 'Sony')->toArray()]);
+
+    expect($import->summary)->toBeNull()
+        ->and($import->countOf(ImportOutcome::Created))->toBe(1)
+        ->and(storedImport()->countOf('rows'))->toBe(0);
 });

@@ -4,6 +4,7 @@ namespace Bernskiold\LaravelImportEngine\Models;
 
 use BackedEnum;
 use Bernskiold\LaravelImportEngine\Contracts\ImportType;
+use Bernskiold\LaravelImportEngine\Enums\ImportOutcome;
 use Bernskiold\LaravelImportEngine\Enums\ImportStatus;
 use Bernskiold\LaravelImportEngine\Exceptions\ImportEngineException;
 use Bernskiold\LaravelImportEngine\Exceptions\UnreadableFileException;
@@ -44,6 +45,7 @@ use Throwable;
  * @property array<string, string|null>|null $column_map
  * @property array<string, mixed>|null $options
  * @property array<string, mixed>|null $report
+ * @property array<string, int>|null $summary
  * @property string|null $failure_reason
  * @property int|string|null $user_id
  * @property Carbon|null $started_at
@@ -66,6 +68,7 @@ class Import extends Model
         'column_map',
         'options',
         'report',
+        'summary',
         'failure_reason',
         'user_id',
         'started_at',
@@ -108,6 +111,7 @@ class Import extends Model
             'column_map' => 'array',
             'options' => 'array',
             'report' => 'array',
+            'summary' => 'array',
             'started_at' => 'datetime',
             'completed_at' => 'datetime',
             'failed_at' => 'datetime',
@@ -184,6 +188,7 @@ class Import extends Model
             'status' => ImportStatus::Completed,
             'completed_at' => now(),
             'report' => $report->toArray(),
+            'summary' => $report->summary(),
         ]);
     }
 
@@ -200,6 +205,7 @@ class Import extends Model
             'failed_at' => now(),
             'failure_reason' => $reason,
             'report' => $report?->toArray() ?? $this->report,
+            'summary' => $report?->summary() ?? $this->summary,
         ]);
     }
 
@@ -249,6 +255,23 @@ class Import extends Model
     public function importReport(): ImportReport
     {
         return ImportReport::fromArray($this->report ?? []);
+    }
+
+    /**
+     * One count of the summary: "rows", an outcome such as "created", or
+     * "needing_attention" or "with_warnings".
+     *
+     * The summary is a column of its own, so this works also for a record
+     * that was loaded without the report. A record without a summary, for
+     * example a record from before the summary existed, reads the report.
+     */
+    public function countOf(ImportOutcome|string $key): int
+    {
+        $key = $key instanceof ImportOutcome ? $key->value : $key;
+
+        $summary = $this->summary ?? ($this->hasReport() ? $this->importReport()->summary() : []);
+
+        return (int) ($summary[$key] ?? 0);
     }
 
     /*
@@ -383,6 +406,30 @@ class Import extends Model
     public function scopeStartedBy(Builder $query, Authenticatable|int|string $user): Builder
     {
         return $query->where('user_id', $user instanceof Authenticatable ? $user->getAuthIdentifier() : $user);
+    }
+
+    /**
+     * Select all the columns except the report.
+     *
+     * A report can contain thousands of entries. Use this scope for a list
+     * of imports, and read the counts with countOf().
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    public function scopeWithoutReport(Builder $query): Builder
+    {
+        $table = $this->getTable();
+
+        $columns = collect($this->getConnection()->getSchemaBuilder()->getColumnListing($table))
+            ->reject(fn (string $column): bool => $column === 'report')
+            ->map(fn (string $column): string => $table.'.'.$column)
+            ->values()
+            ->all();
+
+        $query->select($columns);
+
+        return $query;
     }
 
     /**
