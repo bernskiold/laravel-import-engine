@@ -4,6 +4,7 @@ namespace Bernskiold\LaravelImportEngine;
 
 use Bernskiold\LaravelImportEngine\Exceptions\ImportEngineException;
 use Bernskiold\LaravelImportEngine\Exceptions\MissingColumnsException;
+use Bernskiold\LaravelImportEngine\Exceptions\RowException;
 use Bernskiold\LaravelImportEngine\Exceptions\UnreadableFileException;
 use Bernskiold\LaravelImportEngine\Support\Column;
 use Bernskiold\LaravelImportEngine\Support\ImportContext;
@@ -13,6 +14,7 @@ use Generator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use LogicException;
 use ReflectionMethod;
 use Throwable;
@@ -244,8 +246,8 @@ abstract class Importer
 
         return collect($this->columns())
             ->filter(fn (Column $column): bool => $column->isRequired())
-            ->reject(fn (Column $column): bool => in_array($column->key(), $mapped, true))
-            ->map(fn (Column $column): string => $column->label())
+            ->reject(fn (Column $column): bool => in_array($column->getKey(), $mapped, true))
+            ->map(fn (Column $column): string => $column->getLabel())
             ->values()
             ->all();
     }
@@ -258,7 +260,7 @@ abstract class Importer
     final public function fields(): array
     {
         return collect($this->columns())
-            ->mapWithKeys(fn (Column $column): array => [$column->key() => $column->label()])
+            ->mapWithKeys(fn (Column $column): array => [$column->getKey() => $column->getLabel()])
             ->all();
     }
 
@@ -271,7 +273,7 @@ abstract class Importer
     {
         return collect($this->columns())
             ->filter(fn (Column $column): bool => $column->isRequired())
-            ->map(fn (Column $column): string => $column->key())
+            ->map(fn (Column $column): string => $column->getKey())
             ->values()
             ->all();
     }
@@ -336,14 +338,10 @@ abstract class Importer
                 $report->merge($rowReport);
             } catch (Throwable $exception) {
                 /*
-                 * Record the message, and do not throw again. A person can
+                 * Record the failure, and do not throw again. A person can
                  * correct the row, and the other rows stay imported.
                  */
-                if (config('import-engine.report_row_failures', true)) {
-                    report($exception);
-                }
-
-                $report->failed($row, $this->subject($row), [$exception->getMessage()]);
+                $report->failed($row, $this->subject($row), $this->failureNotes($exception));
             }
         }
     }
@@ -484,6 +482,28 @@ abstract class Importer
     }
 
     /**
+     * The notes for a row that threw an exception.
+     *
+     * A RowException and a ValidationException are for the person, and the
+     * exception handler does not get them. Another exception goes to the
+     * exception handler, and the person gets a fixed sentence.
+     *
+     * @return array<int, string>
+     */
+    private function failureNotes(Throwable $exception): array
+    {
+        if ($exception instanceof ValidationException) {
+            return $exception->validator->errors()->all();
+        }
+
+        if (! $exception instanceof RowException && config('import-engine.report_row_failures', true)) {
+            report($exception);
+        }
+
+        return [ImportEngine::rowFailureMessage($exception)];
+    }
+
+    /**
      * Run the callback in a transaction on each of the connections.
      *
      * @param  array<int, string|null>  $connections
@@ -537,7 +557,7 @@ abstract class Importer
     {
         return collect($this->columns())
             ->mapWithKeys(fn (Column $column): array => [
-                $column->key() => collect([$column->key(), $column->label(), $column->getHeading()])
+                $column->getKey() => collect([$column->getKey(), $column->getLabel(), $column->getHeading()])
                     ->merge($column->getAliases())
                     ->map(fn (string $spelling): string => self::normalise($spelling))
                     ->unique()

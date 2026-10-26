@@ -7,6 +7,8 @@ use Illuminate\Support\Str;
 /**
  * One column that an importer can read.
  *
+ * Set the column with the fluent methods. Read it with the get methods.
+ *
  * The key is the name of the field in each ImportRow. The label is the name
  * that a person sees. The aliases are other column headings that mean the
  * same field. The engine uses the key, the label and the aliases to guess
@@ -84,12 +86,12 @@ final class Column
         return $this;
     }
 
-    public function key(): string
+    public function getKey(): string
     {
         return $this->key;
     }
 
-    public function label(): string
+    public function getLabel(): string
     {
         return $this->label ?? $this->key;
     }
@@ -115,12 +117,12 @@ final class Column
     /**
      * The heading for a blank template.
      *
-     * It is in snake case, for example "bfc_identifier". A heading goes
+     * It is in snake case, for example "vat_number". A heading goes
      * through Excel, CSV files and scripts, and each step can change spaces
      * or capitals. Snake case does not change. The engine compares headings
      * without case and punctuation, so the template still maps itself.
      *
-     * This does not use Str::snake(), which changes "BFC" to "b_f_c".
+     * This does not use Str::snake(), which changes "VAT" to "v_a_t".
      */
     public function getHeading(): string
     {
@@ -128,7 +130,7 @@ final class Column
             return $this->heading;
         }
 
-        return Str::of($this->label())
+        return Str::of($this->getLabel())
             ->lower()
             ->replaceMatches('/[^a-z0-9]+/', '_')
             ->trim('_')
@@ -141,8 +143,8 @@ final class Column
     public function toArray(): array
     {
         return [
-            'key' => $this->key(),
-            'label' => $this->label(),
+            'key' => $this->getKey(),
+            'label' => $this->getLabel(),
             'heading' => $this->getHeading(),
             'description' => $this->getDescription(),
             'required' => $this->isRequired(),

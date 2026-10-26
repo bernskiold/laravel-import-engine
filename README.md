@@ -10,7 +10,7 @@ This package imports CSV and Excel files into a Laravel application. You write o
 - It guesses the column map from the headings, and it accepts a map from a person.
 - It makes a preview: it runs the import in a transaction, and then it rolls the transaction back.
 - It runs the import on the queue, as the person who started it.
-- It keeps a report with one entry for each row: created, updated, unchanged, conflicted, ignored or failed.
+- It keeps a report with one entry for each row: created, updated, unchanged, conflicted, skipped or failed.
 
 ```php
 use Bernskiold\LaravelImportEngine\Actions\StartImport;
@@ -36,6 +36,7 @@ $import->refresh()->importReport()->countOf(ImportOutcome::Created); // 412
 - [Give a template to download](#give-a-template-to-download)
 - [Events](#events)
 - [Extend the import model](#extend-the-import-model)
+- [What your application must do](#what-your-application-must-do)
 - [Prune old imports](#prune-old-imports)
 - [Configuration](#configuration)
 - [Test your importers](#test-your-importers)
@@ -153,7 +154,7 @@ class ContactImporter extends Importer
 Obey these rules:
 
 - Record one entry for each row. Use `unchanged()` when the record already had the values of the row. Then a second run of the same file shows that nothing changed.
-- If `importRow()` throws an exception, the engine records the row as failed and reads the next row. The engine sends the exception to the exception handler, and it puts the message in the report.
+- If `importRow()` throws an exception, the engine records the row as failed and reads the next row. See [Messages for the person](#messages-for-the-person) for the note that the row gets.
 - Each row is in its own database transaction. If a row fails, the engine rolls back the writes of that row only. To stop this, return `false` from `transactionPerRow()`.
 - If the importer writes to a database connection that is not the default, return the connections from `connections()`. The transactions and the preview then use these connections.
 
@@ -180,6 +181,27 @@ protected function handle(ImportReport $report): void
     // Validate all the rows, then write them in one transaction.
 }
 ```
+
+### Messages for the person
+
+The notes and the reason for a failure are shown to people. An exception message can contain SQL, host names or paths, so the engine shows only the messages that are written for a person:
+
+| Exception | The person sees | The exception handler gets it |
+| --- | --- | --- |
+| `RowException`, thrown in `importRow()` | The message | No |
+| `ValidationException`, thrown in `importRow()` | The validation messages | No |
+| `ImportFileException`, for example `MissingColumnsException` | The message, as the reason for the failure | No |
+| Another exception | A fixed sentence | Yes |
+
+```php
+use Bernskiold\LaravelImportEngine\Exceptions\RowException;
+
+if ($row->date('sent')?->isFuture()) {
+    throw new RowException(__('The date is in the future.'));
+}
+```
+
+Set `show_exception_messages` to `true` to show every message, for example in an internal tool.
 
 ### Options
 
@@ -280,9 +302,9 @@ A CSV file is read as UTF-8 when it is valid UTF-8 or has a UTF-8 byte order mar
 
 ## Record what occurred
 
-Each entry has a row, an outcome, a subject, notes and warnings:
+Each entry has a line, an outcome, a subject, notes and warnings:
 
-- The row is the line number in the file. Then a person can find the row in the spreadsheet.
+- The line is the line number in the file. Then a person can find the row in the spreadsheet.
 - The subject is the name of the row, for example a client name or an email address.
 - The notes tell what the importer did.
 - The warnings tell about problems that did not stop the row.
@@ -359,6 +381,8 @@ $import->progress(); // 0.42, or null when the total is not known yet.
 An override of `handle()` calls `advance()` for each row that it reads.
 
 The job does not try again. If the file is incorrect, for example if a required column is missing, the job fails but it does not send the exception to the exception handler.
+
+Each record runs one time. `RunImport` claims the record with one conditional update, and only a pending record can be claimed. If the queue delivers the job two times, the second job does nothing. If you call `RunImport` on a record that already started, it throws `ImportAlreadyStartedException`. To import the file again, start a new import.
 
 To run an import without a queue, use `RunImport`:
 
@@ -496,6 +520,16 @@ Laravel looks for prunable models in `app/Models` only. Schedule the command wit
 Schedule::command('model:prune', ['--model' => [Import::class]])->daily();
 ```
 
+## What your application must do
+
+The package reads, runs and records. These decisions stay with your application:
+
+- **Validate the upload.** Accept only the formats that the engine reads, with `mimes:csv,txt,xlsx`, and set a maximum size.
+- **Authorize.** The package has no policies. Check that the person can start the import type, and can see the record, before you show its report.
+- **Keep personal data for a limited time.** A report keeps the subject of each row, for example an email address. Set `prune_after_days`, and set `delete_files_after_run` to `true` when you do not need the files after the run.
+- **Use a queue with a long enough retry time.** The `retry_after` of the queue connection must be longer than `queue.timeout`. Otherwise a second worker gets the job while the first worker still runs it.
+- **Set the user key type before you migrate.** If your users have UUID or ULID keys, set `user_key_type` before you publish and run the migration.
+
 ## Configuration
 
 | Key | Default | Use |
@@ -504,6 +538,7 @@ Schedule::command('model:prune', ['--model' => [Import::class]])->daily();
 | `model` | `Import::class` | The import model. |
 | `table` | `imports` | The table of the import model. |
 | `user_model` | `null` | The user model. The default is the model of the default auth provider. |
+| `user_key_type` | `id` | The key type of the user model: `id`, `uuid` or `ulid`. The migration uses it. |
 | `disk` | `null` | The disk for uploaded files. The default is the default filesystem disk. |
 | `directory` | `imports` | The directory on the disk. |
 | `delete_files_after_run` | `false` | Delete the file when the run stops. Set this to `true` for files with personal data. |
@@ -511,7 +546,8 @@ Schedule::command('model:prune', ['--model' => [Import::class]])->daily();
 | `date_order` | `dmy` | The order of a date such as `03/04/2026`: `dmy` or `mdy`. |
 | `progress_interval` | `50` | Write the progress to the record after this number of rows. |
 | `prune_after_days` | `null` | Delete the settled imports after this number of days. `null` keeps them. |
-| `report_row_failures` | `true` | Send the exception of a failed row to the exception handler. |
+| `show_exception_messages` | `false` | Show the message of every exception to the person. |
+| `report_row_failures` | `true` | Send the exception of a failed row to the exception handler. A `RowException` or a `ValidationException` is never sent. |
 | `queue.connection` | `null` | The queue connection of the job. |
 | `queue.queue` | `null` | The queue of the job. |
 | `queue.timeout` | `900` | The maximum time of one run, in seconds. |
@@ -544,6 +580,8 @@ $imports->assertNothingStarted();
 ```
 
 ## Testing
+
+The tests use SQLite. To run them on MySQL or Postgres, set `DB_CONNECTION` to `mysql` or `pgsql`, and set `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME` and `DB_PASSWORD`.
 
 ```bash
 composer test

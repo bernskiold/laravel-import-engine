@@ -5,7 +5,9 @@ namespace Bernskiold\LaravelImportEngine\Jobs;
 use BackedEnum;
 use Bernskiold\LaravelImportEngine\Actions\RunImport;
 use Bernskiold\LaravelImportEngine\Events\ImportFailed;
+use Bernskiold\LaravelImportEngine\Exceptions\ImportAlreadyStartedException;
 use Bernskiold\LaravelImportEngine\Exceptions\ImportFileException;
+use Bernskiold\LaravelImportEngine\ImportEngine;
 use Bernskiold\LaravelImportEngine\Models\Import;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -57,6 +59,12 @@ class RunImportJob implements ShouldQueue
 
         try {
             $run->execute($this->import);
+        } catch (ImportAlreadyStartedException) {
+            /*
+             * The queue delivered the job again, and another worker has the
+             * record. Do nothing.
+             */
+            return;
         } catch (ImportFileException $exception) {
             /*
              * The file is incorrect, not the application. The record has the
@@ -84,7 +92,9 @@ class RunImportJob implements ShouldQueue
             return;
         }
 
-        $this->import->fail($exception?->getMessage() ?: __('The import stopped unexpectedly.'));
+        $this->import->fail($exception !== null
+            ? ImportEngine::failureMessage($exception)
+            : __('The import stopped because of an error in the application.'));
 
         ImportFailed::dispatch($this->import);
     }

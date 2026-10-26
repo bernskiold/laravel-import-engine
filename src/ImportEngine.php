@@ -5,9 +5,12 @@ namespace Bernskiold\LaravelImportEngine;
 use BackedEnum;
 use Bernskiold\LaravelImportEngine\Contracts\ImportType;
 use Bernskiold\LaravelImportEngine\Exceptions\ImportEngineException;
+use Bernskiold\LaravelImportEngine\Exceptions\ImportFileException;
+use Bernskiold\LaravelImportEngine\Exceptions\RowException;
 use Bernskiold\LaravelImportEngine\Models\Import;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Throwable;
 
 /**
  * Reads the configuration of the engine.
@@ -90,5 +93,42 @@ final class ImportEngine
     public static function directory(): string
     {
         return trim((string) config('import-engine.directory', 'imports'), '/');
+    }
+
+    /**
+     * The reason for a run that stopped, for the person who started it.
+     *
+     * Only the message of an ImportFileException is for a person. Another
+     * exception can contain SQL, host names or paths, so the person gets a
+     * fixed sentence. The "show_exception_messages" config shows all
+     * messages.
+     */
+    public static function failureMessage(Throwable $exception): string
+    {
+        if (($exception instanceof ImportFileException || self::showsExceptionMessages()) && $exception->getMessage() !== '') {
+            return $exception->getMessage();
+        }
+
+        return __('The import stopped because of an error in the application.');
+    }
+
+    /**
+     * The note for a row that failed, for the person who started the import.
+     *
+     * Only the message of a RowException is for a person, see
+     * failureMessage().
+     */
+    public static function rowFailureMessage(Throwable $exception): string
+    {
+        if (($exception instanceof RowException || self::showsExceptionMessages()) && $exception->getMessage() !== '') {
+            return $exception->getMessage();
+        }
+
+        return __('The row could not be imported because of an error in the application.');
+    }
+
+    private static function showsExceptionMessages(): bool
+    {
+        return (bool) config('import-engine.show_exception_messages', false);
     }
 }

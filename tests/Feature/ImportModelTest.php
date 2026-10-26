@@ -9,6 +9,10 @@ use Bernskiold\LaravelImportEngine\Support\Spreadsheet;
 use Bernskiold\LaravelImportEngine\Tests\Fixtures\ContactImporter;
 use Bernskiold\LaravelImportEngine\Tests\Fixtures\TestImportType;
 use Bernskiold\LaravelImportEngine\Tests\Fixtures\User;
+use Bernskiold\LaravelImportEngine\Tests\Fixtures\UuidUser;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 
 function storedImport(array $attributes = []): Import
@@ -185,4 +189,43 @@ it('counts from the report when there is no summary', function () {
     expect($import->summary)->toBeNull()
         ->and($import->countOf(ImportOutcome::Created))->toBe(1)
         ->and(storedImport()->countOf('rows'))->toBe(0);
+});
+
+it('reads the columns of the table one time for each process', function () {
+    Storage::fake('local');
+
+    storedImport();
+
+    Import::query()->withoutReport()->get();
+
+    DB::enableQueryLog();
+
+    Import::query()->withoutReport()->get();
+
+    expect(DB::getQueryLog())->toHaveCount(1);
+});
+
+it('makes a uuid user column when the users have uuid keys', function () {
+    Schema::create('uuid_users', function (Blueprint $table) {
+        $table->uuid('id')->primary();
+        $table->string('name');
+        $table->timestamps();
+    });
+
+    config()->set('import-engine.table', 'uuid_imports');
+    config()->set('import-engine.user_model', UuidUser::class);
+    config()->set('import-engine.user_key_type', 'uuid');
+
+    (include __DIR__.'/../../database/migrations/create_imports_table.php.stub')->up();
+
+    $user = UuidUser::query()->create(['name' => 'Ada']);
+
+    $import = Import::query()->create([
+        'type' => TestImportType::Contacts,
+        'file_name' => 'contacts.csv',
+        'user_id' => $user->id,
+    ]);
+
+    expect($import->refresh()->user->is($user))->toBeTrue()
+        ->and(Schema::getColumnType('uuid_imports', 'user_id'))->not->toBeIn(['integer', 'bigint', 'int']);
 });

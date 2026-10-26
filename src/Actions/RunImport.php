@@ -5,6 +5,8 @@ namespace Bernskiold\LaravelImportEngine\Actions;
 use Bernskiold\LaravelImportEngine\Events\ImportCompleted;
 use Bernskiold\LaravelImportEngine\Events\ImportFailed;
 use Bernskiold\LaravelImportEngine\Events\ImportStarted;
+use Bernskiold\LaravelImportEngine\Exceptions\ImportAlreadyStartedException;
+use Bernskiold\LaravelImportEngine\ImportEngine;
 use Bernskiold\LaravelImportEngine\Models\Import;
 use Bernskiold\LaravelImportEngine\Support\ImportContext;
 use Bernskiold\LaravelImportEngine\Support\ImportReport;
@@ -25,11 +27,14 @@ use Throwable;
 class RunImport
 {
     /**
+     * @throws ImportAlreadyStartedException When the record is not pending.
      * @throws Throwable
      */
     public function execute(Import $import): ImportReport
     {
-        $import->start();
+        if (! $import->claim()) {
+            throw ImportAlreadyStartedException::for($import->getKey());
+        }
 
         ImportStarted::dispatch($import);
 
@@ -68,7 +73,7 @@ class RunImport
 
     private function fail(Import $import, Throwable $exception): void
     {
-        $import->fail($exception->getMessage() ?: __('The import stopped unexpectedly.'));
+        $import->fail(ImportEngine::failureMessage($exception));
 
         ImportFailed::dispatch($import);
     }

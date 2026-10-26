@@ -8,6 +8,7 @@ use Bernskiold\LaravelImportEngine\Enums\ImportStatus;
 use Bernskiold\LaravelImportEngine\Events\ImportCompleted;
 use Bernskiold\LaravelImportEngine\Events\ImportFailed;
 use Bernskiold\LaravelImportEngine\Events\ImportStarted;
+use Bernskiold\LaravelImportEngine\Exceptions\ImportAlreadyStartedException;
 use Bernskiold\LaravelImportEngine\Exceptions\MissingColumnsException;
 use Bernskiold\LaravelImportEngine\Exceptions\UnreadableFileException;
 use Bernskiold\LaravelImportEngine\Jobs\RunImportJob;
@@ -209,6 +210,8 @@ it('previews with an importer, a map and a limit', function () {
 });
 
 it('rolls the preview back when it stops halfway', function () {
+    $level = DB::transactionLevel();
+
     try {
         app(PreviewImport::class)->execute(TestImportType::Contacts, spreadsheet("Name,Notes\nSony,x\n"));
     } catch (MissingColumnsException) {
@@ -216,7 +219,7 @@ it('rolls the preview back when it stops halfway', function () {
     }
 
     expect(Contact::query()->count())->toBe(0)
-        ->and(DB::transactionLevel())->toBe(0);
+        ->and(DB::transactionLevel())->toBe($level);
 });
 
 it('keeps a row that fails in a preview from the other rows', function () {
@@ -284,12 +287,63 @@ it('marks the record as failed when the job dies', function () {
     $import = pendingImport();
     $import->start();
 
-    (new RunImportJob($import))->failed(new RuntimeException('Timed out.'));
+    (new RunImportJob($import))->failed(new RuntimeException('SQLSTATE[HY000] on db.internal'));
 
     expect($import->refresh()->status)->toBe(ImportStatus::Failed)
-        ->and($import->failure_reason)->toBe('Timed out.');
+        ->and($import->failure_reason)->toBe('The import stopped because of an error in the application.');
 
     Event::assertDispatched(ImportFailed::class);
+});
+
+it('shows the message of the exception when configured', function () {
+    Storage::fake('local');
+    config()->set('import-engine.show_exception_messages', true);
+
+    $import = pendingImport();
+    $import->start();
+
+    (new RunImportJob($import))->failed(new RuntimeException('Timed out.'));
+
+    expect($import->refresh()->failure_reason)->toBe('Timed out.');
+});
+
+it('does not run a record two times', function () {
+    Storage::fake('local');
+
+    $import = pendingImport();
+
+    app(RunImport::class)->execute($import);
+
+    expect(fn () => app(RunImport::class)->execute($import))
+        ->toThrow(ImportAlreadyStartedException::class);
+
+    expect(Contact::query()->count())->toBe(2)
+        ->and($import->refresh()->status)->toBe(ImportStatus::Completed);
+});
+
+it('does nothing when the queue delivers the job again', function () {
+    Storage::fake('local');
+
+    $import = pendingImport();
+
+    (new RunImportJob($import))->handle(app(RunImport::class));
+    $report = $import->refresh()->report;
+
+    (new RunImportJob($import))->handle(app(RunImport::class));
+
+    expect($import->refresh()->report)->toBe($report)
+        ->and(Contact::query()->count())->toBe(2);
+});
+
+it('claims a pending record one time only', function () {
+    Storage::fake('local');
+
+    $import = pendingImport();
+    $copy = Import::query()->find($import->id);
+
+    expect($import->claim())->toBeTrue()
+        ->and($copy->claim())->toBeFalse()
+        ->and($copy->status)->toBe(ImportStatus::Processing);
 });
 
 it('does not change a settled record when the job dies', function () {

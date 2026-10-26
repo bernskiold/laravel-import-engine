@@ -32,7 +32,7 @@ it('records a row that does not obey the rules as failed, and does not import it
     $failed = $report->entries()->firstWhere('outcome', ImportOutcome::Failed);
 
     expect($report->countOf(ImportOutcome::Created))->toBe(1)
-        ->and($failed->row)->toBe(2)
+        ->and($failed->line)->toBe(2)
         ->and($failed->subject)->toBe('Sony')
         ->and($failed->notes)->toBe(['The Email field must be a valid email address.'])
         ->and(Contact::query()->pluck('email')->all())->toBe(['pepsi@example.com']);

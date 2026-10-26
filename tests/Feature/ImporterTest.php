@@ -3,6 +3,7 @@
 use Bernskiold\LaravelImportEngine\Enums\ImportOutcome;
 use Bernskiold\LaravelImportEngine\Exceptions\ImportEngineException;
 use Bernskiold\LaravelImportEngine\Exceptions\MissingColumnsException;
+use Bernskiold\LaravelImportEngine\Exceptions\RowException;
 use Bernskiold\LaravelImportEngine\Importer;
 use Bernskiold\LaravelImportEngine\Support\Column;
 use Bernskiold\LaravelImportEngine\Support\ImportContext;
@@ -11,6 +12,7 @@ use Bernskiold\LaravelImportEngine\Support\ImportRow;
 use Bernskiold\LaravelImportEngine\Tests\Fixtures\Contact;
 use Bernskiold\LaravelImportEngine\Tests\Fixtures\ContactImporter;
 use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Validation\ValidationException;
 
 it('reads each row through the map', function () {
     $report = (new ContactImporter)->execute(
@@ -65,11 +67,51 @@ it('records a row that fails and reads the next row', function () {
 
     $failed = $report->entries()->firstWhere('outcome', ImportOutcome::Failed);
 
-    expect($failed->row)->toBe(3)
+    expect($failed->line)->toBe(3)
         ->and($failed->subject)->toBe('boom')
-        ->and($failed->notes)->toBe(['This row exploded.']);
+        ->and($failed->notes)->toBe(['The row could not be imported because of an error in the application.']);
 
     Exceptions::assertReported(RuntimeException::class);
+});
+
+it('shows the message of a row exception to the person, and does not report it', function () {
+    Exceptions::fake();
+
+    $importer = new class extends Importer
+    {
+        public function columns(): array
+        {
+            return [Column::make('name')->required()];
+        }
+
+        protected function importRow(ImportRow $row, ImportReport $report): void
+        {
+            match ($row->get('name')) {
+                'future' => throw new RowException('The date is in the future.'),
+                'invalid' => throw ValidationException::withMessages(['name' => ['The name is not valid.']]),
+                default => $report->created($row, $row->get('name')),
+            };
+        }
+    };
+
+    $report = $importer->execute(spreadsheet("name,other\nfuture,1\ninvalid,2\nSony,3\n"));
+
+    expect($report->entries()->pluck('notes')->all())->toBe([
+        ['The date is in the future.'],
+        ['The name is not valid.'],
+        [],
+    ]);
+
+    Exceptions::assertNothingReported();
+});
+
+it('shows the message of each row exception when configured', function () {
+    Exceptions::fake();
+    config()->set('import-engine.show_exception_messages', true);
+
+    $report = (new ContactImporter)->execute(spreadsheet("Name,Email\nboom,boom@example.com\n"));
+
+    expect($report->entries()->sole()->notes)->toBe(['This row exploded.']);
 });
 
 it('rolls back the writes of a row that fails', function () {

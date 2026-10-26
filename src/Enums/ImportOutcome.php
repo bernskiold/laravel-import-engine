@@ -32,7 +32,7 @@ enum ImportOutcome: string
             self::Updated => __('Updated'),
             self::Unchanged => __('Unchanged'),
             self::Conflicted => __('Conflicted'),
-            self::Skipped => __('Ignored'),
+            self::Skipped => __('Skipped'),
             self::Failed => __('Failed'),
         };
     }

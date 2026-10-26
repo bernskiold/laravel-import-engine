@@ -31,6 +31,12 @@ return [
     'user_model' => null,
 
     /*
+     * The type of the primary key of the user model: "id" for an integer,
+     * "uuid" or "ulid". The migration uses it for the user_id column.
+     */
+    'user_key_type' => 'id',
+
+    /*
      * The disk and directory for uploaded files. Leave the disk null to use
      * the default filesystem disk. The disk name is kept on each record, so
      * a file stays readable after you change this setting.
@@ -73,7 +79,17 @@ return [
     'prune_after_days' => null,
 
     /*
+     * Show the message of each exception to the person who started the
+     * import. When false, a person sees only the messages of file errors
+     * (ImportFileException), of RowException and of validation. Another
+     * exception can contain SQL, host names or paths, so the person gets a
+     * fixed sentence, and the exception handler gets the exception.
+     */
+    'show_exception_messages' => false,
+
+    /*
      * Send the exception of a row that failed to the exception handler.
+     * The engine never sends a RowException or a ValidationException.
      * The report always records the row as failed.
      */
     'report_row_failures' => true,

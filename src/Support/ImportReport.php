@@ -234,7 +234,7 @@ final class ImportReport
     private function add(ImportOutcome $outcome, ImportRow|int|null $row, ?string $subject, array $notes, array $warnings): self
     {
         return $this->record(new ImportEntry(
-            row: $row instanceof ImportRow ? $row->line : $row,
+            line: $row instanceof ImportRow ? $row->line : $row,
             outcome: $outcome,
             subject: $subject,
             notes: array_values($notes),

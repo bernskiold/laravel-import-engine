@@ -28,7 +28,7 @@ it('counts each outcome and each severity', function () {
 it('takes the line from a row', function () {
     $report = (new ImportReport)->created(new ImportRow(line: 12), 'Sony');
 
-    expect($report->entries()->first()->row)->toBe(12);
+    expect($report->entries()->first()->line)->toBe(12);
 });
 
 it('knows when a run changed nothing', function () {
@@ -71,11 +71,15 @@ it('stores and reads back the same report', function () {
     expect(ImportReport::fromArray($stored)->toArray())->toBe($report->toArray());
 });
 
+it('reads an entry that was stored with a row key', function () {
+    expect(ImportEntry::fromArray(['row' => 7, 'outcome' => 'created'])->line)->toBe(7);
+});
+
 it('reads an unknown outcome as failed', function () {
     $entry = ImportEntry::fromArray(['row' => '4', 'outcome' => 'renamed', 'notes' => [1]]);
 
     expect($entry->outcome)->toBe(ImportOutcome::Failed)
-        ->and($entry->row)->toBe(4)
+        ->and($entry->line)->toBe(4)
         ->and($entry->notes)->toBe(['1'])
         ->and($entry->warnings)->toBe([]);
 });

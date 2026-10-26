@@ -20,6 +20,8 @@ use Spatie\SimpleExcel\SimpleExcelReader;
  *
  * The engine does not accept ODS files. simple-excel has no options object
  * for ODS, so this flag can not be set for that format.
+ *
+ * @internal Use Spreadsheet to read a file.
  */
 class SpreadsheetReader extends SimpleExcelReader
 {

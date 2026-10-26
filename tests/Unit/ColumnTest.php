@@ -3,12 +3,12 @@
 use Bernskiold\LaravelImportEngine\Support\Column;
 
 it('uses the key when there is no label', function () {
-    expect(Column::make('email')->label())->toBe('email');
+    expect(Column::make('email')->getLabel())->toBe('email');
 });
 
 it('makes a heading in snake case from the label', function () {
-    expect(Column::make('source:bfc', 'BFC identifier')->getHeading())->toBe('bfc_identifier')
-        ->and(Column::make('signal', 'Signal AI identifier')->getHeading())->toBe('signal_ai_identifier');
+    expect(Column::make('vat', 'VAT number')->getHeading())->toBe('vat_number')
+        ->and(Column::make('duns', 'D-U-N-S identifier')->getHeading())->toBe('d_u_n_s_identifier');
 });
 
 it('uses a heading that is set', function () {

@@ -82,6 +82,13 @@ class Import extends Model
         'failed_at',
     ];
 
+    /**
+     * The columns of each import table, for withoutReport().
+     *
+     * @var array<string, array<int, string>>
+     */
+    protected static array $columnListings = [];
+
     protected $attributes = [
         'status' => 'pending',
         'processed_rows' => 0,
@@ -191,6 +198,33 @@ class Import extends Model
             'total_rows' => null,
             'processed_rows' => 0,
         ]);
+    }
+
+    /**
+     * Start the run, but only if the record is still pending.
+     *
+     * The status changes in one conditional update. Thus when the queue
+     * delivers the job two times, only one worker gets the record. The
+     * update does not cause model events.
+     *
+     * @return bool False when the run already started or stopped.
+     */
+    public function claim(): bool
+    {
+        $claimed = static::query()
+            ->whereKey($this->getKey())
+            ->where('status', ImportStatus::Pending)
+            ->update([
+                'status' => ImportStatus::Processing,
+                'started_at' => now(),
+                'total_rows' => null,
+                'processed_rows' => 0,
+                'updated_at' => now(),
+            ]);
+
+        $this->refresh();
+
+        return $claimed === 1;
     }
 
     /**
@@ -470,8 +504,11 @@ class Import extends Model
     public function scopeWithoutReport(Builder $query): Builder
     {
         $table = $this->getTable();
+        $cacheKey = $this->getConnectionName().'.'.$table;
 
-        $columns = collect($this->getConnection()->getSchemaBuilder()->getColumnListing($table))
+        static::$columnListings[$cacheKey] ??= $this->getConnection()->getSchemaBuilder()->getColumnListing($table);
+
+        $columns = collect(static::$columnListings[$cacheKey])
             ->reject(fn (string $column): bool => $column === 'report')
             ->map(fn (string $column): string => $table.'.'.$column)
             ->values()
@@ -480,6 +517,17 @@ class Import extends Model
         $query->select($columns);
 
         return $query;
+    }
+
+    /**
+     * Forget the column listings that withoutReport() keeps.
+     *
+     * The listing stays for the life of the process. Call this after a
+     * migration changes the table in the same process, for example in a test.
+     */
+    public static function forgetColumnListings(): void
+    {
+        static::$columnListings = [];
     }
 
     /**
