@@ -90,6 +90,29 @@ it('starts an import from a local file, for a user and with more attributes', fu
         ->and(Storage::disk('local')->exists($import->file_path))->toBeTrue();
 });
 
+it('keeps the extension of the file', function (string $name, string $contents, string $extension) {
+    Queue::fake();
+    Storage::fake('local');
+
+    $import = app(StartImport::class)->execute(TestImportType::Contacts, uploadedSpreadsheet($contents, $name));
+
+    expect(pathinfo($import->file_path, PATHINFO_EXTENSION))->toBe($extension)
+        ->and($import->file_name)->toBe($name);
+})->with([
+    'csv sent as text' => ['contacts.csv', CONTACTS_FILE, 'csv'],
+    'txt' => ['contacts.txt', CONTACTS_FILE, 'txt'],
+    'upper case' => ['CONTACTS.CSV', CONTACTS_FILE, 'csv'],
+]);
+
+it('keeps the extension of a local file', function () {
+    Queue::fake();
+    Storage::fake('local');
+
+    $import = app(StartImport::class)->execute(TestImportType::Contacts, spreadsheet(CONTACTS_FILE));
+
+    expect($import->file_path)->toEndWith('.csv');
+});
+
 it('uses the configured disk and directory', function () {
     Queue::fake();
     Storage::fake('uploads');

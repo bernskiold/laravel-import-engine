@@ -14,6 +14,7 @@ use Illuminate\Http\File;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 /**
@@ -47,8 +48,8 @@ class StartImport
         $disk = ImportEngine::disk();
 
         $path = $file instanceof UploadedFile
-            ? $file->store(ImportEngine::directory(), $disk)
-            : Storage::disk($disk)->putFile(ImportEngine::directory(), new File($file));
+            ? $file->storeAs(ImportEngine::directory(), $this->storedName($file), $disk)
+            : Storage::disk($disk)->putFileAs(ImportEngine::directory(), new File($file), $this->storedName($file));
 
         if (! is_string($path)) {
             throw new RuntimeException('The import file could not be stored.');
@@ -73,6 +74,29 @@ class StartImport
         $this->dispatch($import);
 
         return $import;
+    }
+
+    /**
+     * A random name for the stored file, with the extension of the file.
+     *
+     * Laravel guesses an extension from the MIME type, and a CSV upload is
+     * often "text/plain", which gives ".txt". The file keeps the extension
+     * that the person gave it. When it has none, the guess of Laravel is
+     * used.
+     */
+    protected function storedName(UploadedFile|string $file): string
+    {
+        $extension = Str::lower($file instanceof UploadedFile
+            ? $file->getClientOriginalExtension()
+            : pathinfo($file, PATHINFO_EXTENSION));
+
+        if (preg_match('/^[a-z0-9]{1,10}$/', $extension) !== 1) {
+            $extension = $file instanceof UploadedFile ? (string) $file->guessExtension() : '';
+        }
+
+        $name = Str::random(40);
+
+        return $extension !== '' ? $name.'.'.$extension : $name;
     }
 
     /**
