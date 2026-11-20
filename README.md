@@ -60,7 +60,7 @@ php artisan migrate
 
 The migration makes the `imports` table. Each row of the table is one run of one importer on one file.
 
-The package requires PHP 8.3 or higher, Laravel 12 or 13, and `spatie/simple-excel`. It supports openspout 4 and 5.
+The package requires PHP 8.3 or higher, Laravel 12 or 13, and `spatie/simple-excel`. It supports openspout 4 and 5. PHP 8.6 needs Laravel 13, because Laravel 12 does not support PHP 8.6.
 
 ## The import types
 
