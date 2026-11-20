@@ -2,6 +2,19 @@
 
 All the important changes to `laravel-import-engine` are in this file.
 
+## v0.1.1 - 2026-11-20
+
+### What's Changed
+
+* Add PHP 8.6 to the test matrix and drop Laravel 11 by @ErikBernskiold in https://github.com/bernskiold/laravel-import-engine/pull/3
+* Require PHP 8.6 in the test matrix by @ErikBernskiold in https://github.com/bernskiold/laravel-import-engine/pull/4
+
+### New Contributors
+
+* @ErikBernskiold made their first contribution in https://github.com/bernskiold/laravel-import-engine/pull/3
+
+**Full Changelog**: https://github.com/bernskiold/laravel-import-engine/compare/v0.1.0...v0.1.1
+
 ## v0.1.0 - 2026-10-27
 
 First release.
