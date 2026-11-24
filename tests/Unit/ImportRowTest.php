@@ -10,6 +10,15 @@ it('reads a placeholder as no value', function (string $cell) {
         ->and($row->values('code'))->toBe([]);
 })->with(['', '  ', '-', '—', 'n/a', 'N/A', 'TBC', 'null', '?']);
 
+it('keeps a placeholder in a literal field', function () {
+    $row = new ImportRow(line: 2, values: ['region' => ' NA ', 'codes' => 'NA, US', 'other' => 'NA', 'empty' => ' '], literal: ['region', 'codes', 'empty']);
+
+    expect($row->get('region'))->toBe('NA')
+        ->and($row->values('codes'))->toBe(['NA', 'US'])
+        ->and($row->get('other'))->toBeNull()
+        ->and($row->get('empty'))->toBeNull();
+});
+
 it('trims the value', function () {
     expect((new ImportRow(line: 2, values: ['name' => '  Sony  ']))->get('name'))->toBe('Sony');
 });

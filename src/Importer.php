@@ -49,6 +49,11 @@ abstract class Importer
     private array $fieldsByColumn = [];
 
     /**
+     * @var array<int, string> The fields that keep a placeholder as their value.
+     */
+    private array $literalFields = [];
+
+    /**
      * The number of rows that the run has read.
      */
     private int $processed = 0;
@@ -165,6 +170,11 @@ abstract class Importer
 
         $this->context = $context;
         $this->fieldsByColumn = $this->fieldsByColumn($map);
+        $this->literalFields = collect($this->columns())
+            ->filter(fn (Column $column): bool => $column->isLiteral())
+            ->map(fn (Column $column): string => $column->getKey())
+            ->values()
+            ->all();
         $this->processed = 0;
         $this->runRules = null;
 
@@ -177,6 +187,7 @@ abstract class Importer
 
             $this->context = null;
             $this->fieldsByColumn = [];
+            $this->literalFields = [];
             $this->runRules = null;
         }
 
@@ -416,6 +427,7 @@ abstract class Importer
                 line: $row['line'],
                 values: $this->applyMap($row['values']),
                 original: $row['values'],
+                literal: $this->literalFields,
             );
         }
     }

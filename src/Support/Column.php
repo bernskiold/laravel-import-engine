@@ -23,6 +23,8 @@ final class Column
 {
     private bool $required = false;
 
+    private bool $literal = false;
+
     private ?string $description = null;
 
     private ?string $heading = null;
@@ -49,6 +51,21 @@ final class Column
     public function required(bool $required = true): self
     {
         $this->required = $required;
+
+        return $this;
+    }
+
+    /**
+     * Read each cell of this column as it is, also a placeholder such as
+     * "NA", "-" or "TBC".
+     *
+     * Use it for a column where a placeholder can be a real value, for
+     * example "NA" for North America or the country code of Namibia. An
+     * empty cell is still no value.
+     */
+    public function literal(bool $literal = true): self
+    {
+        $this->literal = $literal;
 
         return $this;
     }
@@ -99,6 +116,11 @@ final class Column
     public function isRequired(): bool
     {
         return $this->required;
+    }
+
+    public function isLiteral(): bool
+    {
+        return $this->literal;
     }
 
     public function getDescription(): ?string
