@@ -166,6 +166,7 @@ Obey these rules:
 | --- | --- |
 | `required()` | The run stops when the file, or the map, does not supply the column. |
 | `aliases(...)` | Other headings that mean this field. The engine compares headings without case, spaces and punctuation, so give only the headings that use different words. |
+| `literal()` | The row keeps a placeholder such as `NA` or `-` as the value of this column. Use it when a placeholder can be a real value, for example `NA` for North America. An empty cell is still `null`. |
 | `description($text)` | A description for a screen that tells the person what the file must contain. |
 | `heading($text)` | The heading in a blank template. The default is the label in snake case. |
 
@@ -271,7 +272,7 @@ public function rules(): array
 
 | Method | Result |
 | --- | --- |
-| `get('field')` | The value, or `null`. A placeholder such as `-`, `n/a`, `TBC` or `#N/A` is `null`. |
+| `get('field')` | The value, or `null`. A placeholder such as `-`, `n/a`, `TBC` or `#N/A` is `null`, unless the column is `literal()`. |
 | `has('field')` | `true` when `get()` is not `null`. |
 | `values('field')` | A list. Commas, semicolons, pipes, slashes and line breaks separate the items. |
 | `lines('field')` | A list with one item on each line. Use it for names that contain commas. |

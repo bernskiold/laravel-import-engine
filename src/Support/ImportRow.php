@@ -11,7 +11,8 @@ use Throwable;
  *
  * The accessors are tolerant of the values that people type:
  *
- * - get() reads a placeholder such as "-", "n/a" or "TBC" as no value.
+ * - get() reads a placeholder such as "-", "n/a" or "TBC" as no value,
+ *   unless the field is literal.
  * - values() splits a cell that holds a list, such as "1234, 1235; 1236".
  * - lines() splits a cell on line breaks only, for names that contain commas.
  * - integer() reads "#7" and "7.0" as 7.
@@ -38,11 +39,13 @@ final readonly class ImportRow
     /**
      * @param  array<string, string>  $values  The values, keyed by field.
      * @param  array<string, string>  $original  The values, keyed by the column headings of the file.
+     * @param  array<int, string>  $literal  The fields that keep a placeholder as their value.
      */
     public function __construct(
         public int $line,
         private array $values = [],
         private array $original = [],
+        private array $literal = [],
     ) {}
 
     /**
@@ -52,7 +55,7 @@ final readonly class ImportRow
     {
         $value = trim($this->values[$field] ?? '');
 
-        if ($value === '' || self::isPlaceholder($value)) {
+        if ($value === '' || $this->isPlaceholder($field, $value)) {
             return null;
         }
 
@@ -261,7 +264,7 @@ final readonly class ImportRow
 
         return collect(preg_split($separators, $value) ?: [])
             ->map(fn (string $part): string => trim($part))
-            ->reject(fn (string $part): bool => $part === '' || self::isPlaceholder($part))
+            ->reject(fn (string $part): bool => $part === '' || $this->isPlaceholder($field, $part))
             ->unique()
             ->values()
             ->all();
@@ -296,8 +299,9 @@ final readonly class ImportRow
         return $date;
     }
 
-    private static function isPlaceholder(string $value): bool
+    private function isPlaceholder(string $field, string $value): bool
     {
-        return in_array(Str::lower($value), self::PLACEHOLDERS, true);
+        return ! in_array($field, $this->literal, true)
+            && in_array(Str::lower($value), self::PLACEHOLDERS, true);
     }
 }

@@ -200,6 +200,27 @@ it('lets an importer read the file in its own way', function () {
         ->and($report->entries()->first()->subject)->toBe('Sony, Pepsi');
 });
 
+it('keeps a placeholder in a literal column only', function () {
+    $importer = new class extends Importer
+    {
+        public function columns(): array
+        {
+            return [Column::make('region')->literal(), Column::make('code')];
+        }
+
+        protected function handle(ImportReport $report): void
+        {
+            foreach ($this->rows() as $row) {
+                $report->created($row, ($row->get('region') ?? 'none').' / '.($row->get('code') ?? 'none'));
+            }
+        }
+    };
+
+    $report = $importer->import(ImportContext::forFile(spreadsheet("region,code\nNA,NA\n,TBC\n")));
+
+    expect($report->entries()->pluck('subject')->all())->toBe(['NA / none', 'none / none']);
+});
+
 it('stops an importer that does not import', function () {
     $importer = new class extends Importer
     {

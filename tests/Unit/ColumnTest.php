@@ -15,6 +15,11 @@ it('uses a heading that is set', function () {
     expect(Column::make('name', 'Client name')->heading('Client')->getHeading())->toBe('Client');
 });
 
+it('is not literal unless it is set', function () {
+    expect(Column::make('region')->isLiteral())->toBeFalse()
+        ->and(Column::make('region')->literal()->isLiteral())->toBeTrue();
+});
+
 it('keeps the settings', function () {
     $column = Column::make('email', 'Email')
         ->required()
