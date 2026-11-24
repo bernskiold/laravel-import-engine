@@ -2,6 +2,18 @@
 
 All the important changes to `laravel-import-engine` are in this file.
 
+## v0.1.2 - 2026-11-24
+
+### What's Changed
+
+* Add a literal option to keep placeholders in a column by @annlickander in https://github.com/bernskiold/laravel-import-engine/pull/5
+
+### New Contributors
+
+* @annlickander made their first contribution in https://github.com/bernskiold/laravel-import-engine/pull/5
+
+**Full Changelog**: https://github.com/bernskiold/laravel-import-engine/compare/v0.1.1...v0.1.2
+
 ## v0.1.1 - 2026-11-20
 
 ### What's Changed
